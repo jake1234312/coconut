@@ -23,7 +23,8 @@ struct gameView {
 	int score;
 	int health[NUM_PLAYERS];
 	
-	TLink trailHead[NUM_PLAYERS];//
+	TLink trailHead[NUM_PLAYERS];
+	// the head of the linked list contains the current location
 	
 	Round round;
 	PlayerID currPlayer;
@@ -34,16 +35,16 @@ static void updateTrail(GameView g, LocationID location, PlayerID player);
 static void encounters(GameView g, char* events, PlayerID player);
 
 static int myAbbrevToID(char *abbrev);
+static int myIDToType(GameView g, PlayerID player);
 static int charToPlayerID(char player);
 
 // Creates a new GameView to summarise the current state of the game
 GameView newGameView(char *pastPlays, PlayerMessage messages[])
 {
-    //REPLACE THIS WITH YOUR OWN IMPLEMENTATION
 	int i;
 	int len = strlen(pastPlays);
 	int id;
-	int player;
+	int player = PLAYER_DRACULA;
 	char loc[] = "  ";
 	char events[] = "    ";
 	GameView gameView = malloc(sizeof(struct gameView));
@@ -52,24 +53,43 @@ GameView newGameView(char *pastPlays, PlayerMessage messages[])
 	
 	for(i=0;i<NUM_PLAYERS-1;i++) //initialise health
 		gameView->health[i] = GAME_START_HUNTER_LIFE_POINTS;
+		
 	gameView->health[PLAYER_DRACULA] = GAME_START_BLOOD_POINTS;
 	gameView->currPlayer = 0;
 	makeTrail(gameView); //make array of lists (6x6)
-	printf("len %d\n",len);
 	for (i=0;i<len;i+=8){ //for each set of 8chars(one move)
-		printf("%d\n",i);
 		player = charToPlayerID(pastPlays[i]);
-		printf("player %d\n",player);
+		
 		strncpy(loc, &pastPlays[i+1],2);
-		printf("loc %s\n",loc);
 		id = myAbbrevToID(loc);
-		printf("id %d\n",id);
 		updateTrail(gameView, id, player);
 		
 		strncpy(events, &pastPlays[i+3],4);
 		encounters(gameView, events, player);
+		
+		
+		if(player == PLAYER_DRACULA){
+			gameView->score -= SCORE_LOSS_DRACULA_TURN;
+			if (gameView->trailHead[player]->location == CASTLE_DRACULA || 
+				 gameView->trailHead[player]->location == TELEPORT)
+				gameView->health[player] += LIFE_GAIN_CASTLE_DRACULA;
+				
+			if (myIDToType(gameView,player) == SEA)
+					gameView->health[player] -= LIFE_LOSS_SEA;
+		} else {
+			if (gameView->trailHead[player]->location == ST_JOSEPH_AND_ST_MARYS || gameView->health[player] <= 0){
+				gameView->score -= SCORE_LOSS_HUNTER_HOSPITAL;
+				gameView->health[player] = GAME_START_HUNTER_LIFE_POINTS;
+			}else if ((gameView->trailHead[player]->location == gameView->trailHead[player]->next->location) &&
+				       (gameView->health[player] < GAME_START_HUNTER_LIFE_POINTS)){
+				gameView->health[player] += LIFE_GAIN_REST;
+				printf("rest\n");
+			}
+			
+		}
+				
 	}	
-	//gameView->currPlayer = player + 1; //current player is actually the next player(when given to the AI)
+	gameView->currPlayer = (player + 1)%NUM_PLAYERS; //current player is actually the next player(when given to the AI)
 	return gameView;
 }
      
@@ -80,11 +100,11 @@ void disposeGameView(GameView toBeDeleted)
     int i,j;
     TLink curr,prev;
     
-    for (i=0,i<NUM_PLAYERS;i++){
-    	curr = toBeDeleted->trailHead[i]
-    	for (j=0,j<TRAIL_SIZE;j++){
+    for (i=0;i<NUM_PLAYERS;i++){
+    	curr = toBeDeleted->trailHead[i];
+    	for (j=0;j<TRAIL_SIZE;j++){
     		prev = curr;
-    		curr = curr->next
+    		curr = curr->next;
     		free(prev);
     	}   	
     }
@@ -218,16 +238,40 @@ static int myAbbrevToID(char *abbrev){
 	return id;
 }
 
+static int myIDToType(GameView g, PlayerID player){
+	int type = UNKNOWN;
+	int i = 0;
+	TLink curr = g->trailHead[player];
+	LocationID location = curr->location;
+	
+	//hide case is irrellevant for now
+	if (location >= DOUBLE_BACK_1 && location <= DOUBLE_BACK_5){
+		for (i=0;i<location-HIDE;i++) curr = curr->next; //how far back
+		location = curr->location;
+	}
+	switch (location){
+		case CITY_UNKNOWN:
+			type = LAND;
+			break;
+		case SEA_UNKNOWN:
+			type = SEA;
+			break;
+		case HIDE:
+			type = UNKNOWN;
+			break; //not correct but doesnt matter
+		case TELEPORT:
+			location = CASTLE_DRACULA;
+		default:
+			type = idToType(location);
+	}
+	return type;		
+}
+
 static void encounters(GameView g, char* events, PlayerID player){
 	int i;
+	//TODO what happens when health/score/blood drops bellow 0
 	for (i=0;i<4;i++){
 		if (player == PLAYER_DRACULA){
-			g->score -= SCORE_LOSS_DRACULA_TURN;
-			if (g->trailHead[player]->location == CASTLE_DRACULA)
-				g->health[player] += LIFE_GAIN_CASTLE_DRACULA;
-			/*if (g->trailHead[player]->location == SEA_UNKNOWN || //some locations are not recognised
-				 isSea(g->trailHead[player]->location) == TRUE)
-					g->health[player] -= LIFE_LOSS_SEA;*/
 			switch (events[i]){
 				case 'T': //trap placed
 					g->trailHead[player]->traps++;
@@ -244,14 +288,10 @@ static void encounters(GameView g, char* events, PlayerID player){
 					break;
 			}
 		}else{
-			if (g->trailHead[player]->location == ST_JOSEPH_AND_ST_MARYS)
-				g->score -= SCORE_LOSS_HUNTER_HOSPITAL; 
-			if (g->trailHead[player]->location == g->trailHead[player]->next->location)
-				g->health[player] += LIFE_GAIN_REST; 
 			switch (events[i]){
 				case 'T'://trap sprung
 					g->health[player] -= LIFE_LOSS_TRAP_ENCOUNTER;
-					//remove from drac trail
+					//TODO remove from drac trail
 					break;
 				case 'V'://vampire slain
 					//remove from drac trail
@@ -263,13 +303,4 @@ static void encounters(GameView g, char* events, PlayerID player){
 			}
 		}
 	}
-
 }
-
-
-
-
-
-
-
-
