@@ -166,8 +166,81 @@ LocationID *connectedLocations(GameView currentView, int *numLocations,
                                LocationID from, PlayerID player, Round round,
                                int road, int rail, int sea)
 {
-    //REPLACE THIS WITH YOUR OWN IMPLEMENTATION
-    return NULL;
+   LocationID * locations = malloc((NUM_MAP_LOCATIONS) * sizeof(LocationID));
+   locations[0] = from;
+   int i = 1;
+//   while (i < NUM_MAP_LOCATIONS) {
+//      locations[i] = -1;
+//      i++;
+//   }
+//   i = 1;
+   int j = 0;
+   LocationID destination = 0;
+   Map m = newMap();
+   if (player == PLAYER_DRACULA) {
+      if (road == TRUE) {
+         while (destination < NUM_MAP_LOCATIONS) {
+            if(roadConnection(m, from, destination) == TRUE && destination != ST_JOSEPH_AND_ST_MARYS) {
+               locations[i] = destination;
+               i++;
+            }
+            destination++;
+         }
+      }
+      destination = 0;
+      if (sea == TRUE) {
+         while (destination < NUM_MAP_LOCATIONS) {
+            if(seaConnection(m, from, destination) == TRUE) {
+               locations[i] = destination;
+               i++;
+            }
+            destination++;
+         }
+      
+      }
+   } else {
+      if (road == TRUE) {
+         while (destination < NUM_MAP_LOCATIONS) {
+            if(roadConnection(m, from, destination) == TRUE) {
+               locations[i] = destination;
+               i++;
+            }
+            destination++;
+         }
+      }
+      destination = 0;
+      if (sea == TRUE) {
+         while (destination < NUM_MAP_LOCATIONS) {
+            if(seaConnection(m, from, destination) == TRUE) {
+               locations[i] = destination;
+               i++;
+            }
+            destination++;
+         }
+      
+      }
+      destination = 0;
+      if (rail == TRUE) {
+         while (destination < NUM_MAP_LOCATIONS) {
+            if(railConnection(m, from, destination, player, round) == TRUE) {
+               while (j < NUM_MAP_LOCATIONS) {
+                  if (locations[j] == destination) break;
+                  j++;
+               }
+               if (j == NUM_MAP_LOCATIONS) {
+                  locations[i] = destination;
+                  i++;
+               }
+            }
+            destination++;
+            j = 0;
+         }
+      
+      }
+   }
+   *numLocations  = i;
+
+   return locations;
 }
 
 static void makeTrail(GameView g){
